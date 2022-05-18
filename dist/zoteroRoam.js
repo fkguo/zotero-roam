@@ -1,3 +1,8 @@
+/* adding INSPIRE-HEP support,  FKG, 2022-05-18
+  to  
+  @alixlahuec/zotero-roam | 0.6.98 @ 
+  https://github.com/alixlahuec/zotero-roam/blob/main/dist/zoteroRoam.js
+  */
 
 /** @namespace */
 var zoteroRoam = {};
@@ -82,7 +87,7 @@ var zoteroRoam = {};
             }
         },
         
-        version: "0.6.98",
+        version: "0.6.98-inspire",
 
         data: {items: [], collections: [], semantic: new Map(), libraries: new Map(), keys: [], roamPages: [], tags: {}},
         
@@ -110,7 +115,7 @@ var zoteroRoam = {};
                         }
                         return data;
                     },
-                    keys: ['title', 'authorsString', 'year', 'tagsString', 'key', '_multiField'],
+                    keys: ['title', 'authorsString', 'year', 'tagsString', 'key', '_multiField', 'arxivId'],
                     cache: false,
                     /** @returns {Array} The results, filtered in the order of the 'keys' parameter above, and sorted by authors ascending */
                     filter: (list) => {
@@ -126,7 +131,7 @@ var zoteroRoam = {};
                     }
                 },
                 selector: '#zotero-roam-search-autocomplete',
-                placeHolder: "Search by title, year, authors (last names), citekey, tags",
+                placeHolder: "Search by title, year, authors (last names), citekey, arXiv ID, tags",
                 wrapper: false,
                 /** @returns {boolean} Indicates whether the search should be run */
                 trigger: (query) => {
@@ -464,7 +469,7 @@ var zoteroRoam = {};
                 },
                 pageMenu: {
                     defaults: ["addMetadata", "importNotes", "viewItemInfo", "openZoteroLocal", "openZoteroWeb",
-                            "pdfLinks", "sciteBadge", "connectedPapers", "semanticScholar", "googleScholar", "citingPapers"],
+                            "pdfLinks", "sciteBadge", "connectedPapers", "semanticScholar", "inspireHEP", "googleScholar", "citingPapers"],
                     trigger: (title) => {
                         return title.length > 3 ? true : false;
                     }
@@ -806,14 +811,14 @@ var zoteroRoam = {};
     // Load the autoComplete JS (if there's a better way, I'm all ears)
     // This should be done early on so that the autoComplete constructor is available & ready
     var ac = document.createElement("script");
-    ac.src = "https://cdn.jsdelivr.net/npm/@tarekraafat/autocomplete.js@10.1.5/dist/autoComplete.js";
+    ac.src = "https://unpkg.com/@tarekraafat/autocomplete.js@10.1.5/dist/autoComplete.js";
     ac.type = "text/javascript";
     document.getElementsByTagName("head")[0].appendChild(ac);
 
     // Load the tribute JS
     if(typeof(window.Tribute) == 'undefined'){
         var trib = document.createElement('script');
-        trib.src = "https://cdn.jsdelivr.net/npm/tributejs@5.1.3";
+        trib.src = "https://unpkg.com/tributejs@5.1.3";
         trib.type = "text/javascript";
         document.getElementsByTagName("head")[0].appendChild(trib);
     }
@@ -1431,7 +1436,8 @@ var zoteroRoam = {};
                 meta: item.venue.split(/ ?:/)[0], // If the publication has a colon, only take the portion that precedes it
                 title: item.title,
                 url: item.url || "",
-                year: item.year ? item.year.toString() : ""
+                year: item.year ? item.year.toString() : "",
+                arxivId: item.arxivId
             }
 
             // Parse authors data
@@ -1470,8 +1476,36 @@ var zoteroRoam = {};
                 cleanItem.links['connectedPapers'] = `https://www.connectedpapers.com/api/redirect/doi/${item.doi}`;
                 cleanItem.links['googleScholar'] = `https://scholar.google.com/scholar?q=${item.doi}`;
             }
+            // for INSPIRE in the citing papers/references 
+            cleanItem.links['inspireHEP'] = `https://inspirehep.net/literature?q=${item.arxivId ? "eprint " + item.arxivId : item.doi}`;
 
-            return cleanItem;
+            return cleanItem; 
+        },
+
+        // Parse title, added by FKG | 2022-05-18
+        parseTitle(title){
+            let cleanTitle = title;
+            let formattingSpecs = {
+                "</p>": "",
+                '<span class="nocase">': "",
+                "</span>": "",
+                "<pre>": "",
+                "</pre>": "",
+                "<sub>": "$$$_{",  //somehow $$$ is needed to give $$
+                "<sup>": "$$$^{",
+                "</sub>": "}$$$",
+                "</sup>": "}$$$",
+                "</sub><sup>": "}^{",
+                "</sup><sub>": "}_{",
+                "<i>": "__",
+                "</i>": "__",
+                "<b>": "**",
+                "</b>": "**"
+            }
+            for(prop in formattingSpecs){
+                cleanTitle = cleanTitle.replaceAll(`${prop}`, `${formattingSpecs[prop]}`);
+            }
+            return cleanTitle;
         },
 
         cleanNewlines(text){
@@ -1919,7 +1953,7 @@ var zoteroRoam = {};
             let item = zoteroRoam.data.items.find(i => i.key == citekey);
 
             try {
-                let itemNotes = zoteroRoam.formatting.getItemChildren(item, {pdf_as: "raw", notes_as: "formatted", split_char = zoteroRoam.config.params.notes["split_char"] }).notes;
+                let itemNotes = zoteroRoam.formatting.getItemChildren(item, {pdf_as: "raw", notes_as: "formatted", split_char: split_char = zoteroRoam.config.params.notes["split_char"] }).notes;
                 let outcome = {};
 
                 let pageUID = uid || "";
@@ -1970,12 +2004,22 @@ var zoteroRoam = {};
                 if(typeof(item.data.extra) !== 'undefined'){
                     if(item.data.extra.includes('Citation Key: ')){
                         item.key = item.data.extra.match('Citation Key: (.+)')[1];
+                    };
+                    if(item.data.extra.includes('arXiv: ')){
+                        // should not use 'arXiv: ' here, otherwise give all the rest text in extra
+                        item.arxivId = item.data.extra.match('Xiv: ([^\n]+)')[1]; 
+                    };
+                    if(item.data.extra.includes('tex.collaboration: ')){
+                        item.collaboration = item.data.extra.match('collaboration: ([^\n]+)')[1];
+                    };
+                    if(item.data.extra.includes('Number: ')){
+                        item.reportNo = item.data.extra.match('umber: ([^\n]+)')[1];
                     }
                 }
                 return item;
             });
         },
-
+        
         /**
          * @todo Add handling of non-200 response codes from the API
          * Fetches data from the Zotero Web API
@@ -2601,6 +2645,7 @@ var zoteroRoam = {};
             }
         },
 
+        // to be used for library search autocompletion
         simplifyDataArray(arr){
             // Filter out attachments & notes
             let itemsArray = arr.filter(el => !(["attachment", "note", "annotation"].includes(el.data.itemType)));
@@ -2622,12 +2667,15 @@ var zoteroRoam = {};
                     authorsString: item.data.creators.map(c => c.lastName || c.name).join(" "),
                     tagsString: item.data.tags.map(i => `#${i.tag}`).join(", "),
                     location: zoteroRoam.utils.getItemPrefix(item),
-                    itemType: item.data.itemType
+                    itemType: item.data.itemType,
+                    // added arxivId and collaboration so that they can be used in search | FKG | 2022-05-18
+                    arxivId: `${item.data.extra.includes('arXiv') ? item.data.extra.match('arXiv: ([^\s]+)') : ""}`,
+                    collaboration: `${item.data.extra.includes('collaboration') ? item.data.extra.match('collaboration: ([^\n]+)') : ""}`
                 }
 
                 simplifiedItem["_multiField"] = simplifiedItem.authorsString + " " + simplifiedItem.year + " " + simplifiedItem.title + " " + simplifiedItem.tagsString;
                 simplifiedItem["inGraph"] = zoteroRoam.data.roamPages.has('@' + item.key) ? true : false;
-        
+                    
                 return simplifiedItem;
         
             });
@@ -2684,6 +2732,9 @@ var zoteroRoam = {};
                     if(cit.doi){
                         simplifiedCitation.links.semanticScholar = `https://api.semanticscholar.org/${cit.doi}`;
                     }
+                    // INSPIRE-HEP
+                    simplifiedCitation.links.inspireHEP = `https://inspirehep.net/literature?q=${(!cit.doi) ? item.key + " or eprint arXiv:" + item.arxivId : cit.doi}`;
+                    
                     // Google Scholar
                     simplifiedCitation.links.googleScholar = `https://scholar.google.com/scholar?q=${(!cit.doi) ? encodeURIComponent(cit.title) : cit.doi}`;
         
@@ -4054,6 +4105,9 @@ var zoteroRoam = {};
                         case "semanticScholar":
                             linksArray.push(`<span class="zotero-roam-citation-link" service="semantic-scholar"><a href="${cit.links[service]}" target="_blank" class="zr-text-small">Semantic Scholar</a></span>`);
                             break;
+                        case "inspireHEP":
+                            linksArray.push(`<span class="zotero-roam-citation-link" service="inspire-hep"><a href="${cit.links[service]}" target="_blank" class="zr-text-small">INSPIRE</a></span>`);
+                            break;
                         case "googleScholar":
                             linksArray.push(`<span class="zotero-roam-citation-link" service="google-scholar"><a href="${cit.links[service]}" target="_blank" class="zr-text-small">Google Scholar</a></span>`);
                             break;
@@ -5412,6 +5466,7 @@ var zoteroRoam = {};
             let itemChildren = zoteroRoam.formatting.getItemChildren(item, { pdf_as: "raw", notes_as: "raw" });
             // List of default elements to include
             let menu_defaults = zoteroRoam.config.params.pageMenu.defaults;
+            let itemArxivId = item.arxivId
             // ----
             // Div wrapper
             let pageDiv = elem.parentElement.querySelector('.zotero-roam-page-div');
@@ -5457,6 +5512,7 @@ var zoteroRoam = {};
                 let records_list = [];
                 if(menu_defaults.includes("connectedPapers")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "Connected Papers", {icon: "layout", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-connected-papers", linkAttribute: `target="_blank"`, target: `https://www.connectedpapers.com/${(!item.data.DOI) ? "search?q=" + encodeURIComponent(item.data.title) : "api/redirect/doi/" + itemDOI}`})) }
                 if(menu_defaults.includes("semanticScholar")){ records_list.push((!itemDOI) ? "" : zoteroRoam.utils.renderBP3Button_link(string = "Semantic Scholar", {icon: "bookmark", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-semantic-scholar", linkAttribute: `target="_blank"`, target: `https://api.semanticscholar.org/${itemDOI}`})) }
+                if(menu_defaults.includes("inspireHEP")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "INSPIRE", {icon: "search-template", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-inspire-hep", linkAttribute: `target="_blank"`, target: `https://inspirehep.net/literature?q=${(item.data.DOI) ? itemDOI : itemCitekey + " or eprint arXiv:" + item.arxivId}`})) }
                 if(menu_defaults.includes("googleScholar")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "Google Scholar", {icon: "learning", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-google-scholar", linkAttribute: `target="_blank"`, target: `https://scholar.google.com/scholar?q=${(!item.data.DOI) ? encodeURIComponent(item.data.title) : itemDOI}`})) }
         
                 // Backlinks
@@ -5754,7 +5810,7 @@ var zoteroRoam = {};
 
         getCreators(item, {creators_as = "string", brackets = true, use_type = true} = {}){
             let creatorsInfoList = item.data.creators.map(creator => {
-                let nameTag = (creator.name) ? `${creator.name}` : `${[creator.firstName, creator.lastName].filter(Boolean).join(" ")}`;
+                let nameTag = (creator.name) ? `${creator.name.replace("others", "et al.")}` : `${[creator.firstName, creator.lastName].filter(Boolean).join(" ")}`;
                 return {
                     name: nameTag,
                     type: creator.creatorType,
@@ -5932,7 +5988,7 @@ var zoteroRoam = {};
             metadata.push(`Publication:: ${ item.data.publicationTitle || item.data.bookTitle || "" }`)
             if (item.data.url) { metadata.push(`URL : ${item.data.url}`) };
             if (item.data.dateAdded) { metadata.push(`Date Added:: ${zoteroRoam.utils.makeDNP(item.data.dateAdded, {brackets: true})}`) }; // Date added, as Daily Notes Page reference
-            metadata.push(`Zotero links:: ${zoteroRoam.formatting.getLocalLink(item, {format = "markdown", text = "Local library"})}, ${zoteroRoam.formatting.getWebLink(item, {format = "markdown", text = "Local library"})}`); // Local + Web links to the item
+            metadata.push(`Zotero links:: ${zoteroRoam.formatting.getLocalLink(item, {format: format= "markdown", text:text = "Local library"})}, ${zoteroRoam.formatting.getWebLink(item, {format:format = "markdown", text:text = "Local library"})}`); // Local + Web links to the item
             if (item.data.tags.length > 0) { metadata.push(`Tags:: ${zoteroRoam.formatting.getTags(item)}`) }; // Tags, if any
             
             let children = zoteroRoam.formatting.getItemChildren(item, {pdf_as: "links", notes_as: "formatted"});
