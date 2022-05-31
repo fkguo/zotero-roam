@@ -1477,7 +1477,8 @@ var zoteroRoam = {};
                 cleanItem.links['googleScholar'] = `https://scholar.google.com/scholar?q=${item.doi}`;
             }
             // for INSPIRE in the citing papers/references 
-            cleanItem.links['inspireHEP'] = `https://inspirehep.net/literature?q=${item.arxivId ? "eprint " + item.arxivId : item.doi}`;
+            // cleanItem.links['inspireHEP'] = `https://inspirehep.net/literature?q=${item.arxivId ? "eprint " + item.arxivId : item.doi}`;
+            cleanItem.links['inspireHEP'] = `https://inspirehep.net/literature/${item.recid}`;
 
             return cleanItem; 
         },
@@ -2670,7 +2671,9 @@ var zoteroRoam = {};
                     itemType: item.data.itemType,
                     // added arxivId and collaboration so that they can be used in search | FKG | 2022-05-18
                     arxivId: `${item.data.extra.includes('arXiv') ? item.data.extra.match('arXiv: ([^\s]+)') : ""}`,
-                    collaboration: `${item.data.extra.includes('collaboration') ? item.data.extra.match('collaboration: ([^\n]+)') : ""}`
+                    collaboration: `${item.data.extra.includes('collaboration') ? item.data.extra.match('collaboration: ([^\n]+)') : ""}`,
+                    // added the INSPIRE recid, stored in the archiveLocation (zotero-inspire plugin is needed)
+                    recid: item.data.archiveLocation
                 }
 
                 simplifiedItem["_multiField"] = simplifiedItem.authorsString + " " + simplifiedItem.year + " " + simplifiedItem.title + " " + simplifiedItem.tagsString;
@@ -2733,7 +2736,8 @@ var zoteroRoam = {};
                         simplifiedCitation.links.semanticScholar = `https://api.semanticscholar.org/${cit.doi}`;
                     }
                     // INSPIRE-HEP
-                    simplifiedCitation.links.inspireHEP = `https://inspirehep.net/literature?q=${(!cit.doi) ? item.key + " or eprint arXiv:" + item.arxivId : cit.doi}`;
+                    // simplifiedCitation.links.inspireHEP = `https://inspirehep.net/literature?q=${(!cit.doi) ? item.key + " or eprint arXiv:" + item.arxivId : cit.doi}`;
+                    simplifiedCitation.links.inspireHEP = `https://inspirehep.net/literature/${item.recid}`;
                     
                     // Google Scholar
                     simplifiedCitation.links.googleScholar = `https://scholar.google.com/scholar?q=${(!cit.doi) ? encodeURIComponent(cit.title) : cit.doi}`;
@@ -5512,7 +5516,8 @@ var zoteroRoam = {};
                 let records_list = [];
                 if(menu_defaults.includes("connectedPapers")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "Connected Papers", {icon: "layout", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-connected-papers", linkAttribute: `target="_blank"`, target: `https://www.connectedpapers.com/${(!item.data.DOI) ? "search?q=" + encodeURIComponent(item.data.title) : "api/redirect/doi/" + itemDOI}`})) }
                 if(menu_defaults.includes("semanticScholar")){ records_list.push((!itemDOI) ? "" : zoteroRoam.utils.renderBP3Button_link(string = "Semantic Scholar", {icon: "bookmark", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-semantic-scholar", linkAttribute: `target="_blank"`, target: `https://api.semanticscholar.org/${itemDOI}`})) }
-                if(menu_defaults.includes("inspireHEP")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "INSPIRE", {icon: "search-template", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-inspire-hep", linkAttribute: `target="_blank"`, target: `https://inspirehep.net/literature?q=${(item.data.DOI) ? itemDOI : itemCitekey + " or eprint arXiv:" + item.arxivId}`})) }
+                // if(menu_defaults.includes("inspireHEP")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "INSPIRE", {icon: "search-template", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-inspire-hep", linkAttribute: `target="_blank"`, target: `https://inspirehep.net/literature?q=${(item.data.DOI) ? itemDOI : itemCitekey + " or eprint arXiv:" + item.arxivId}`})) }
+                if(menu_defaults.includes("inspireHEP")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "INSPIRE", {icon: "search-template", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-inspire-hep", linkAttribute: `target="_blank"`, target: `https://inspirehep.net/literature/${item.recid}`})) }
                 if(menu_defaults.includes("googleScholar")){ records_list.push(zoteroRoam.utils.renderBP3Button_link(string = "Google Scholar", {icon: "learning", linkClass: "bp3-minimal bp3-intent-primary zotero-roam-page-menu-google-scholar", linkAttribute: `target="_blank"`, target: `https://scholar.google.com/scholar?q=${(!item.data.DOI) ? encodeURIComponent(item.data.title) : itemDOI}`})) }
         
                 // Backlinks
